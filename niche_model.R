@@ -68,6 +68,7 @@ compute_niches <- function(data, file_path, method = "count", abundance_var = NU
     inner_join(final_plot_avg, by = species_col)
 
   return(niche_data)
+  
 }
 
 
@@ -86,52 +87,46 @@ predict_species <- function(niche_data,
     stop(paste("The following variables are missing from niche_data:", paste(missing_vars, collapse = ", ")))
   }
   
-  # Standardize the data (Z-score standardization)
-  niche_data_standardized <- niche_data %>%
+  # Scale the data (0 to 1 scaling)
+  niche_data_scaled <- niche_data %>%
     select(species, all_of(env_vars)) %>%
-    mutate(across(all_of(env_vars), ~ ( . - mean(., na.rm = TRUE)) / sd(., na.rm = TRUE)))
+    mutate(across(all_of(env_vars), ~ ( . - min(., na.rm = TRUE)) / (max(., na.rm = TRUE) - min(., na.rm = TRUE))))
 
-  # Standardize the input vector
-  input_vector_standardized <- input_vector
-  for (var in env_vars) {
-    input_vector_standardized[var] <- (input_vector[var] - mean(niche_data[[var]], na.rm = TRUE)) / sd(niche_data[[var]], na.rm = TRUE)
+  # Scale the input vector
+  input_vector_scaled <- setNames(numeric(length(env_vars)), env_vars)
+  for (i in seq_along(env_vars)) {
+    var <- env_vars[i]
+    input_vector_scaled[var] <- (input_vector[i] - min(niche_data[[var]], na.rm = TRUE)) / 
+                                (max(niche_data[[var]], na.rm = TRUE) - min(niche_data[[var]], na.rm = TRUE))
   }
   
-  # Extract species vectors from the standardized niche_data
-  species_vectors <- niche_data_standardized %>%
+  # Extract species vectors from the scaled niche_data
+  species_vectors <- niche_data_scaled %>%
     select(species, all_of(env_vars)) %>%
-    column_to_rownames(var = "species")  # Make species as row names for easier reference
+    column_to_rownames(var = "species")
 
-  # Compute the cosine similarity between the standardized input vector and each species vector
-  cosine_similarity_results <- apply(species_vectors, 1, function(species_vector) {
-    # Ensure both species_vector and input_vector are in the same order for calculation
-    common_vars <- names(species_vector)
-    
-    dot_product <- sum(species_vector * input_vector_standardized[common_vars], na.rm = TRUE)
-    magnitude_species <- sqrt(sum(species_vector^2, na.rm = TRUE))
-    magnitude_input <- sqrt(sum(input_vector_standardized[common_vars]^2, na.rm = TRUE))
+  # Ensure species_vectors and input_vector_scaled are numeric
+  species_vectors <- as.matrix(species_vectors)
+  input_vector_scaled <- as.numeric(input_vector_scaled)
 
-    # Avoid division by zero
-    if (magnitude_species == 0 || magnitude_input == 0) {
-      return(0)
-    }
-
-    # Cosine similarity calculation
-    dot_product / (magnitude_species * magnitude_input)
+  # Compute the absolute differences and average them
+  absolute_difference_results <- apply(species_vectors, 1, function(species_vector) {
+    mean(abs(species_vector - input_vector_scaled), na.rm = TRUE)
   })
 
-  # Convert the cosine similarity results into a data frame
-  cosine_similarity_df <- data.frame(
-    species = names(cosine_similarity_results),
-    cosine_similarity = cosine_similarity_results,
+  # Convert the absolute difference results into a data frame
+  absolute_difference_df <- data.frame(
+    species = names(absolute_difference_results),
+    absolute_difference = absolute_difference_results,
     row.names = NULL
   )
 
-  # Select the top N species with the highest cosine similarity
-  top_species <- cosine_similarity_df %>%
-    arrange(desc(cosine_similarity)) %>%
+  # Select the top N species with the lowest absolute differences
+  top_species <- absolute_difference_df %>%
+    arrange(absolute_difference) %>%
     slice_head(n = N)
 
   # Return the top N species
   return(top_species)
+  
 }
