@@ -60,6 +60,11 @@ abundance_var <- "AGBtree"
 env_vars_parc = c()
 env_vars_plot = c("pH", "K", "P", "Ca", "Mg", "Al", "H_Al", "SB", "t", "MO", "Argila", "Silte", "Areia", "AWD1", "AWD2", "AWD3", "AWD4", "AWD5", "AWD6")
 
+association_proportion = 0.3
+
+species_associations_ba <- read.csv("species_associations_ba.csv", sep = ",")
+species_associations_count <- read.csv("species_associations_count.csv", sep = ",")
+
 
 env_data <- data[ , env_vars_plot]
 # # Compute the correlation matrix
@@ -81,7 +86,6 @@ niche_data <- compute_niches(
 )
 
 
-
 # Store summed relative abundances
 summed_abundances <- sapply(plots, function(plot_id) {
   relative_abundance_plot <- compute_relative_abundance(data, "Plot", "species", abundance_var, plot_id, abundance_method)
@@ -94,11 +98,14 @@ summed_abundances <- sapply(plots, function(plot_id) {
   }
 
   predicted_species <- predict_species(
-    niche_data = niche_data,  # Use precomputed niche_data
+    niche_data = niche_data,
     env_vars_parc = env_vars_parc,
     env_vars_plot = env_vars_plot,
     input_vector = avg_env_vars,
-    N = nrow(relative_abundance_plot)
+    N = nrow(relative_abundance_plot),
+    association_proportion = association_proportion,
+    species_associations_ba = species_associations_ba,
+    species_associations_count = species_associations_count
   )
 
   compute_overlap_abundance(relative_abundance_plot, predicted_species)

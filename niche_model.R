@@ -76,7 +76,10 @@ predict_species <- function(niche_data,
                             env_vars_parc, 
                             env_vars_plot, 
                             input_vector, 
-                            N = 10) {
+                            N = 10, 
+                            association_proportion = 0.3, 
+                            species_associations_ba, 
+                            species_associations_count) {
   
   # Combine env_vars_parc and env_vars_plot
   env_vars <- c(env_vars_parc, env_vars_plot)
@@ -121,12 +124,90 @@ predict_species <- function(niche_data,
     row.names = NULL
   )
 
-  # Select the top N species with the lowest absolute differences
-  top_species <- absolute_difference_df %>%
-    arrange(absolute_difference) %>%
-    slice_head(n = N)
-
-  # Return the top N species
-  return(top_species)
+  # Calculate the number of species from each method
+  n_niche <- ceiling((1 - association_proportion) * N)
+  n_association <- N - n_niche
   
+  # Select top species from niche-based method
+  niche_species <- absolute_difference_df %>%
+    arrange(absolute_difference) %>%
+    slice_head(n = n_niche)
+  
+  # Get associations for predicted species in both data frames
+  associations_ba <- get_associations(niche_species, species_associations_ba)
+  associations_count <- get_associations(niche_species, species_associations_count)
+
+  # Apply the function to filter non-focal pairs
+  filtered_ba <- filter_non_focal_pairs(associations_ba)
+  filtered_count <- filter_non_focal_pairs(associations_count)
+  
+  combined_associations <- rbind(filtered_ba, filtered_count) %>% 
+    group_by(species) %>% 
+      summarise(association_sum = sum(association)) %>% arrange(desc(association_sum))
+
+  # Select top species from associations
+  association_species <- combined_associations %>%
+    slice_head(n = n_association) %>%
+    select(species)
+  
+  # Combine niche and association-based predictions
+  final_species <- bind_rows(
+    niche_species,
+    association_species %>%
+      filter(!species %in% niche_species$species) %>%
+      mutate(absolute_difference = NA)
+    )
+  
+  # Return the final list of species
+  return(final_species)
+}
+
+
+# Loop through each predicted species and get associations > 0
+get_associations <- function(predicted_species, associations_df) {
+  species <- predicted_species$species
+  
+  result <- do.call(rbind, lapply(species, function(sp) {
+    # Filter for species as species_a or species_b
+    assoc_a <- associations_df[associations_df$species_a == sp & associations_df$association > 0, ]
+    assoc_b <- associations_df[associations_df$species_b == sp & associations_df$association > 0, ]
+    
+    # Create two-column data frames
+    if (nrow(assoc_a) > 0) {
+      assoc_a <- data.frame(species = assoc_a$species_b, 
+                            association = assoc_a$association,
+                            focal_species = sp)
+    } else {
+      assoc_a <- data.frame(species = character(0), 
+                            association = numeric(0),
+                            focal_species = character(0))
+    }
+    
+    if (nrow(assoc_b) > 0) {
+      assoc_b <- data.frame(species = assoc_b$species_a, 
+                            association = assoc_b$association,
+                            focal_species = sp)
+    } else {
+      assoc_b <- data.frame(species = character(0), 
+                            association = numeric(0),
+                            focal_species = character(0))
+    }
+    
+    # Combine both and add the focal species as a column
+    associations <- rbind(assoc_a, assoc_b)
+    return(associations)
+  }))
+  
+  return(result)
+}
+
+
+filter_non_focal_pairs <- function(associations) {
+  # Get the unique focal species
+  focal_species <- unique(associations$focal_species)
+  
+  # Filter rows where species is not in focal_species
+  filtered_associations <- associations[!associations$species %in% focal_species, ]
+  
+  return(filtered_associations)
 }

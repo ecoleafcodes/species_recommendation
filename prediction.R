@@ -17,6 +17,8 @@ env_vars <- c(4, 46.91, 2.69, 0.43, 0.31, 1.5, 9.9, 0.86, 2.36, 10.76, 8, 63.56,
 
 n_species <- 100
 
+association_proportion = 0.4
+
 # Compute niche_data once
 niche_data <- compute_niches(
   data = data,
@@ -30,12 +32,21 @@ niche_data <- compute_niches(
 )
 
 
+association_proportion = 0.4
+
+species_associations_ba <- read.csv("species_associations_ba.csv", sep = ",")
+species_associations_count <- read.csv("species_associations_count.csv", sep = ",")
+
+
 predicted_species <- predict_species(
-niche_data = niche_data,  # Use precomputed niche_data
-env_vars_parc = env_vars_parc,
-env_vars_plot = env_vars_plot,
-input_vector = env_vars,
-N = n_species
+  niche_data = niche_data,
+  env_vars_parc = env_vars_parc,
+  env_vars_plot = env_vars_plot,
+  input_vector = env_vars,
+  N = n_species,
+  association_proportion = association_proportion,
+  species_associations_ba = species_associations_ba,
+  species_associations_count = species_associations_count
 )
 
 
