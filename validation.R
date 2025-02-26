@@ -1,5 +1,6 @@
 library(dplyr)
 library(ggplot2)
+library(corrplot)
 
 
 # Function to compute relative abundance for a specific plot
@@ -57,7 +58,14 @@ plots <- unique(data$Plot)
 abundance_method <- "biomass"
 abundance_var <- "AGBtree"
 env_vars_parc = c()
-env_vars_plot = c("pH", "K", "P", "Ca", "Mg", "Al", "H_Al", "SB", "t", "T", "V", "m", "MO", "Argila", "Silte", "Areia", "AWD1", "AWD2", "AWD3", "AWD4", "AWD5", "AWD6")
+env_vars_plot = c("pH", "K", "P", "Ca", "Mg", "Al", "H_Al", "SB", "t", "MO", "Argila", "Silte", "Areia", "AWD1", "AWD2", "AWD3", "AWD4", "AWD5", "AWD6")
+
+
+env_data <- data[ , env_vars_plot]
+# # Compute the correlation matrix
+cor_matrix <- cor(env_data, use = "complete.obs")
+# # Plot the correlation matrix
+# corrplot(cor_matrix, method = "circle", type = "upper", order = "hclust", tl.cex = 0.8, tl.col = "black", addCoef.col = "gray")
 
 
 # Compute niche_data once
@@ -73,11 +81,17 @@ niche_data <- compute_niches(
 )
 
 
+
 # Store summed relative abundances
 summed_abundances <- sapply(plots, function(plot_id) {
-
   relative_abundance_plot <- compute_relative_abundance(data, "Plot", "species", abundance_var, plot_id, abundance_method)
   avg_env_vars <- get_avg_env_vars(data, "Plot", env_vars_plot, plot_id)
+
+  # Skip iteration if avg_env_vars has any NA values
+  if (any(is.na(avg_env_vars))) {
+    cat("Skipping plot:", plot_id, "due to missing environmental variables.\n")
+    return(NA)  # Return NA to maintain vector structure
+  }
 
   predicted_species <- predict_species(
     niche_data = niche_data,  # Use precomputed niche_data
@@ -88,9 +102,10 @@ summed_abundances <- sapply(plots, function(plot_id) {
   )
 
   compute_overlap_abundance(relative_abundance_plot, predicted_species)
-
 })
 
+# Remove skipped plots (optional)
+summed_abundances <- summed_abundances[!is.na(summed_abundances)]
 
 # Calculate mean summed relative abundance
 mean_abundance <- mean(summed_abundances, na.rm = TRUE)
